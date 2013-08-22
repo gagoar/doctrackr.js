@@ -1,0 +1,6 @@
+<script>
+  var code = window.location.search.replace('?code=','')
+  console.log('from_child: ', code);
+  window.opener.postMessage(code, window.opener.location.origin);
+  if (code) window.close();
+</script>
