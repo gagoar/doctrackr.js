@@ -4,7 +4,6 @@ var insertLink = function(id, link, name){
     a.innerHTML = name + '[protected]'
     document.getElementById('list').insertBefore(a, null);
 
-
 }
 var averte = function(e){
   console.log(e.target.response);
@@ -29,7 +28,17 @@ var handleFileSelect = function (evt) {
 var initialize = function (e){
   document.addEventListener('DOMContentLoaded',function(e){
     document.getElementById('files').addEventListener('change', handleFileSelect);
-    document.getElementById('authorize_me').addEventListener('click', DTLogin.authorize);
-    DT.initialize('PUT YOUR APP_SECRET HERE')
-  })
-}
+    DT.initialize({ client_id: 'YOUR APP HERE'
+                    , redirect_uri: 'YOUR CALLBACK HERE'
+                    , secret: 'YOUR SECRET HERE'
+    })
+      document.getElementById('authorize_me').addEventListener('click', DTLogin.login);
+
+      // triggers from DT library
+      document.addEventListener('success.login.dt', showToken); // on success login we show the token via console.warn
+      document.addEventListener('success.file.dt', readIt); // on success recieving the file we read it
+      document.addEventListener('success.createPolicy.dt', averte); // create a policy and show all the details
+      document.addEventListener('success.updatePolicy.dt', averte); // we show the policy info
+      document.addEventListener('success.logout.dt',byeBye); // on logout we show a console.warn with you need to re login
+    })
+  }

@@ -7,7 +7,7 @@ DT = (function (){
   }
   // origin url for diverse uses
   var origin = window.location.href.replace(window.location.pathname, '')
-  // code obtain in the 1 fase of oauth2 authentication
+  // code obtained in the 1 fase of oauth2
   , code = undefined
   // token structure
   , tokenData  = {}
@@ -42,14 +42,14 @@ DT = (function (){
   var init = function (app_config){
     if ( attr in app_config){
 
-      for(var attr in app_config) // iterar sobre esto para chequear que la conf esta bien asignada.
+      for(var attr in config.app) // iterate in order to assign only the accepted properties
         config.app[attr] = app_config[attr];
 
       config.check() // checking conf first.
       events.create = [ 'login', 'logout', 'token', 'status', 'createFile', 'createPolicy', 'updatePolicy'];
       console.warn('all set!')
 
-    }else throw new Error('check configuration and try again')
+    }else throw new Error('check config and try again')
 
   }
 
@@ -178,7 +178,7 @@ DT = (function (){
 
   // getUser
   var getUser = function () {
-
+    //todo
 
   }
   // updatePolicy
