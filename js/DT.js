@@ -20,12 +20,12 @@ DT = (function (){
     url: 'https://use.doctrackr.com/oauth/authorize'
     , token_url: 'https://api.doctrackr.com/oauth/token'
     , response_type: 'code'
-    app: {
+    , app: {
       client_id: undefined
       , redirect_uri: undefined
       , secret: undefined
     }
-    check: function(){
+    , check: function(){
       for (var property in config.app)
         if (config.app[property] == '' || config.app[property] == undefined) throw new Error('check config and try again');
       return true
@@ -40,13 +40,14 @@ DT = (function (){
 
   // initializer
   var init = function (app_config){
-    if ( attr in app_config){
+    if (Object.keys(app_config).length != 0){
 
       for(var attr in config.app) // iterate in order to assign only the accepted properties
         config.app[attr] = app_config[attr];
 
       config.check() // checking conf first.
-      events.create = [ 'login', 'logout', 'token', 'status', 'createFile', 'createPolicy', 'updatePolicy'];
+      events.create = [ 'initialize', 'login', 'logout', 'token', 'statusFile', 'createFile', 'createPolicy', 'updatePolicy'];
+      events.trigger = [ 'initialize', 'success']
       console.warn('all set!')
 
     }else throw new Error('check config and try again')
@@ -102,14 +103,21 @@ DT = (function (){
         : dom.fireEvent('on' + event.eventType, event);
     }
   };
+  var paramsAuthProcessor =  function(){
+    var params = []
+    for (var prop in config.app)
+      if (config.app.hasOwnProperty(prop) && prop != 'secret')
+        params.push([encodeURIComponent(prop), encodeURIComponent(config.app[prop])].join('='))
+    params.push([encodeURIComponent('response_type'), encodeURIComponent('code')].join('='))
+    return params.join('&')
+  };
   // get well formed url for lunching docktrackr authorization
   var auth = function (){
-    return [ config.url, paramsProcessor(config) ].join('?')
-  }
-
+    return [ config.url, paramsAuthProcessor() ].join('?')
+  };
   // popup window in order to authorize the app
   var authorize = function (){
-    if ( secret ){
+    if ( config.app.secret ){
       var w  = window.open(auth(), '_blank', ['toolbar=no', 'location= ' + (window.opera ? 'no' : 'yes'), 'directories=no,status=no,menubar=no,scrollbars=yes,resizable=yes,copyhistory=no', 'width=1013', 'height=754'].join())
     	w.addEventListener('locationChange', averte);
       internalEvents(true);
@@ -153,7 +161,7 @@ DT = (function (){
   var policyAnswer = function(type){
    return function(e){
      console.log(e);
-     result  = event.status == 200 ? 'success' : 'fail'
+     result  = e.status == 200 ? 'success' : 'fail'
      events.trigger = [type, result, e]
    }
   }
@@ -178,9 +186,12 @@ DT = (function (){
 
   // getUser
   var getUser = function () {
-    //todo
-
+    var xhr = new XMLHttpRequest()
+    xhr.open('GET', 'https://api.doctrackr.com/users/me' , true);
+    xhr.setRequestHeader('Authorization', ['Bearer', returnToken()].join(' '))
+    xhr.onload = policyAnswer('user')
   }
+
   // updatePolicy
   var updatePolicy = function (policy_id) {
     if ( policy_id && ! anyPrivileges() ) throw new Error('check policy_id given and try again')
@@ -232,7 +243,7 @@ DT = (function (){
   // obtainToken
   var obtainToken = function () {
     var xhr = new XMLHttpRequest()
-    , properties = { grant_type: 'authorization_code', code: code, client_id: config.client_id, client_secret: secret, redirect_uri: config.redirect_uri }
+    , properties = { grant_type: 'authorization_code', code: code, client_id: config.app.client_id, client_secret: config.app.secret, redirect_uri: config.app.redirect_uri }
     , params = paramsProcessor(properties)
     , action = [config.token_url, params].join('?')
     console.warn('action: ', action)
@@ -252,12 +263,11 @@ DT = (function (){
   var getStatus = function (id) {
     return function(){
       var xhr = new XMLHttpRequest()
-      , action = ['https://api.doctrackr.com/v1/documents/', id].join('')
+        , action = ['https://api.doctrackr.com/v1/documents/', id].join('')
       console.log('requestStatus: ',  action + '?access_token=' + returnToken())
-
       xhr.open('GET', action , true);
       xhr.setRequestHeader('Authorization', ['Bearer', returnToken()].join(' '))
-      xhr.onload = getResponseFile()
+      xhr.onload = getResponseFile
       xhr.send()
     }
   }
@@ -265,34 +275,38 @@ DT = (function (){
   // checkForStatus
   var checkForStatus = function (id, delay) {
     console.log('checkForStatus:', id, delay)
-    events.trigger = ['status', 'success', {id: id, delay: delay}]
+    events.trigger = ['statusFile', 'success', {id: id, delay: delay}]
     setTimeout( getStatus(id), delay)
   }
 
   // getResponseFile
-  var getResponseFile = function () {
-    return function (e){
-      var resp = JSON.parse(e.target.response)
-      console.log('getResponseFile: ', resp, resp.status, resp.id)
-      if ( resp && resp.id ){
-        resp.status == 'ENABLED'?
-        getProtectedFile(resp.id, resp.url, resp.name)
-        : checkForStatus(resp.id, 5 * Number(1000))
-      } else throw new Error("can't go on without an id")
-    }
+  var getResponseFile = function (e) {
+    console.log('resp:' + e)
+    var resp = JSON.parse(e.target.response)
+    console.log('getResponseFile: ', resp, resp.status, resp.id)
+    if ( resp && resp.id ){
+      resp.status == 'ENABLED'?
+      getProtectedFile(resp.id, resp.url, resp.name)
+      : checkForStatus(resp.id, 5 * Number(1000))
+    } else throw new Error("can't go on without an id")
   }
 
   // protectAFile
-  var protectAFile = function (blob) {
-    if ( blob && !anyPrivileges()){
+  var protectAFile = function (blob, all) {
+    if ( blob && ( !anyPrivileges() || all)){
       var formData = new FormData()
-      , xhr = new XMLHttpRequest()
-
+        , xhr = new XMLHttpRequest()
       formData.append('fileupload', blob, blob.name)
-      formData.append('policy[verify_identity]', true)
-      for (privilege in privileges)
-        if (privileges[privilege].length)
-          formData.append('policy[privileges][' + privilege + '][]', privileges[privilege].join(','))
+      if (all){
+        formData.append('policy[verify_identity]', false)
+        formData.append('policy[privileges][can_view][]', 'everyone')
+      }
+      else{
+        formData.append('policy[verify_identity]', true)
+        for (privilege in privileges)
+          if (privileges[privilege].length)
+            formData.append('policy[privileges][' + privilege + '][]', privileges[privilege].join(','))
+      }
 
       xhr.open('POST', 'https://api.doctrackr.com/v1/documents', true);
       xhr.setRequestHeader('Authorization', ['Bearer', returnToken()].join(' '))
@@ -329,12 +343,15 @@ DT = (function (){
       , removePrivilege: removePrivilege
       , update: updatePolicy
     }
-    , logout: logout
     , version: versions.version
     , test:{
       anyPrivileges: anyPrivileges
       , privileges: privileges
     }
-
-  }
+    , logout: logout
+    , mnt: {
+      events: events
+      , config: config
+      , aver: paramsAuthProcessor
+  }}
 }());
